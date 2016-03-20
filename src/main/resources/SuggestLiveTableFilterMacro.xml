@@ -1,0 +1,752 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<!--
+ * See the NOTICE file distributed with this work for additional
+ * information regarding copyright ownership.
+ *
+ * This is free software; you can redistribute it and/or modify it
+ * under the terms of the GNU Lesser General Public License as
+ * published by the Free Software Foundation; either version 2.1 of
+ * the License, or (at your option) any later version.
+ *
+ * This software is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU
+ * Lesser General Public License for more details.
+ *
+ * You should have received a copy of the GNU Lesser General Public
+ * License along with this software; if not, write to the Free
+ * Software Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA
+ * 02110-1301 USA, or see the FSF site: http://www.fsf.org.
+-->
+
+<xwikidoc version="1.2" reference="XWiki.SuggestLiveTableFilterMacro" locale="">
+  <web>XWiki</web>
+  <name>SuggestLiveTableFilterMacro</name>
+  <language/>
+  <defaultLanguage/>
+  <translation>0</translation>
+  <creator>xwiki:XWiki.Admin</creator>
+  <creationDate>1458208200000</creationDate>
+  <parent>XWiki.WebHome</parent>
+  <author>xwiki:XWiki.Admin</author>
+  <contentAuthor>xwiki:XWiki.Admin</contentAuthor>
+  <date>1458236208000</date>
+  <contentUpdateDate>1458235906000</contentUpdateDate>
+  <version>1.1</version>
+  <title>Suggest Live Table Filter Macro</title>
+  <comment/>
+  <minorEdit>false</minorEdit>
+  <syntaxId>xwiki/2.1</syntaxId>
+  <hidden>false</hidden>
+  <content>With this macro, We can transform the LiveTable filter input, into suggest in order to filter by the key ( for eg : XWiki.User1 ), we can use this macros on a dbList field property.
+This macro should be called before the livetable macro.
+
+
+Demo : 
+*  //try to filter by Author// 
+
+{{velocity}}
+## Prepare the suggest service url
+#set ($suggestURL = $xwiki.getURL("XWiki.SuggestAuthorServices","get","outputSyntax=plain&amp;"))
+
+{{SuggestLiveTableFilter suggestServiceURL="$suggestURL" colname="doc.author" /}}
+{{/velocity}}
+
+{{documents id="alldocs"/}}</content>
+  <object>
+    <name>XWiki.SuggestLiveTableFilterMacro</name>
+    <number>0</number>
+    <className>XWiki.JavaScriptExtension</className>
+    <guid>24128f3b-cdf0-4990-b338-a66d5cba0163</guid>
+    <class>
+      <name>XWiki.JavaScriptExtension</name>
+      <customClass/>
+      <customMapping/>
+      <defaultViewSheet/>
+      <defaultEditSheet/>
+      <defaultWeb/>
+      <nameField/>
+      <validationScript/>
+      <cache>
+        <cache>0</cache>
+        <disabled>0</disabled>
+        <displayType>select</displayType>
+        <multiSelect>0</multiSelect>
+        <name>cache</name>
+        <number>5</number>
+        <prettyName>Caching policy</prettyName>
+        <relationalStorage>0</relationalStorage>
+        <separator> </separator>
+        <separators>|, </separators>
+        <size>1</size>
+        <unmodifiable>0</unmodifiable>
+        <values>long|short|default|forbid</values>
+        <classType>com.xpn.xwiki.objects.classes.StaticListClass</classType>
+      </cache>
+      <code>
+        <disabled>0</disabled>
+        <name>code</name>
+        <number>2</number>
+        <prettyName>Code</prettyName>
+        <rows>20</rows>
+        <size>50</size>
+        <unmodifiable>0</unmodifiable>
+        <classType>com.xpn.xwiki.objects.classes.TextAreaClass</classType>
+      </code>
+      <name>
+        <disabled>0</disabled>
+        <name>name</name>
+        <number>1</number>
+        <prettyName>Name</prettyName>
+        <size>30</size>
+        <unmodifiable>0</unmodifiable>
+        <classType>com.xpn.xwiki.objects.classes.StringClass</classType>
+      </name>
+      <parse>
+        <disabled>0</disabled>
+        <displayFormType>select</displayFormType>
+        <displayType>yesno</displayType>
+        <name>parse</name>
+        <number>4</number>
+        <prettyName>Parse content</prettyName>
+        <unmodifiable>0</unmodifiable>
+        <classType>com.xpn.xwiki.objects.classes.BooleanClass</classType>
+      </parse>
+      <use>
+        <cache>0</cache>
+        <disabled>0</disabled>
+        <displayType>select</displayType>
+        <multiSelect>0</multiSelect>
+        <name>use</name>
+        <number>3</number>
+        <prettyName>Use this extension</prettyName>
+        <relationalStorage>0</relationalStorage>
+        <separator> </separator>
+        <separators>|, </separators>
+        <size>1</size>
+        <unmodifiable>0</unmodifiable>
+        <values>currentPage|onDemand|always</values>
+        <classType>com.xpn.xwiki.objects.classes.StaticListClass</classType>
+      </use>
+    </class>
+    <property>
+      <cache>default</cache>
+    </property>
+    <property>
+      <code>/**********************************************************************/
+/*        LiveTable Suggested filter (case of dbList prop)            */
+/*        Author : Zoubir Medjdoub                                    */
+/**********************************************************************/
+var XWiki = (function (XWiki) {
+var widgets = XWiki.widgets = XWiki.widgets || {};
+
+/**
+  * The class representing a suggest field used for the LiveTable filter.
+  * 
+  */
+    XWiki.widgets.SuggestLiveTableFilter = Class.create({
+  /**
+    * @param element The HTML input that will be used for the suggest.
+    * @param fieldname the field that will be used for the suggest service
+    * @param suggestServiceURL the url used for the suggest service
+    *   
+    */
+  initialize: function(element,fieldname,suggestServiceURL) {
+
+    this.input = element;
+    this.fieldname = fieldname;
+    this.suggestServiceURL = suggestServiceURL;
+    // Setup the hidden input that will keep the key used on the LiveTable filter
+    this.element = this.setupSuggest(this.input);
+
+    // Creation of the list of item
+    this.list = new Element('ul', {'class' : 'picker-list'});
+    this.input.insert({'after' : this.list});
+    this.prepareContainer();
+  },
+
+ /**
+   * Remove the LT filter listner and Add The suggested listener
+   *
+   */
+  addSuggestBehavior : function() {
+    this.input.onfocus = function() {
+      // Init the sugest input
+      if(typeof this.suggest == "undefined") {
+        Event.stopObserving(this.input);
+        this.suggest = new ajaxSuggest(this.input, {script:this.suggestServiceURL, varname:'input'} )
+      }
+      this.suggest.options.timeout = 5000;
+      this.suggest.options.width = 200;
+      this.suggest.options.callback = this.setValueFilter.bind(this);
+    }.bind(this);
+  },
+ /**
+   * Prepare the Container that will contains the suggested value
+   *
+   */
+  prepareContainer : function() {
+    var inputName = this.input.readAttribute('name');
+    var listId = inputName + "_suggestPicker";
+    this.list.writeAttribute('id', listId);
+  },
+
+  /**
+   * Set the suggested value chosen by the user
+   * @param selected The selected obj from the suggested value ( xml : &lt;rs info="key"&gt;value&lt;/rs&gt; )
+   **/    
+  setValueFilter : function(selected) {
+    // get the key
+    var key = selected.info;
+    if (!key) {
+      return;
+    }
+    // init the input field 
+    this.input.value = "";
+    var value = selected.value;
+    // Delete the line of the old elem
+    this.list.select('li.Token').each(function(elem){elem.remove();})   
+    // Create the new line of elem
+    var li = document.createElement("li");
+    li.addClassName('Token')
+    var span = new Element('span', {'title' : key}).update(value.escapeHTML());
+    span.className = "picker-item";
+    li._x_value = value;
+    // Add the delete linkfor item
+    var deleteLink = new Element("a", {'class' : "Close",'id' : key}).update('×');
+    deleteLink.observe('click', this.removeValueFilter.bindAsEventListener(this));
+    li.appendChild(deleteLink);
+    li.appendChild(span);
+    // Add the new line before the search input
+    this.list.insert( li );
+    // Launch the LiveTable filter with the chosen key 
+    this.element.value = key;
+    document.fire("xwiki:livetable:" + $$('.xwiki-livetable')[0].id + ":filtersChanged");
+  },
+
+  /**
+   * Remove the current Filter
+   * @param event The event target inorder to get the item to delete
+   **/  
+  removeValueFilter : function(event) {
+    // Find the item li to delete
+    var itemToDelete = event.findElement('li');
+    itemToDelete.remove(); 
+    // Launch the LiveTable with empty filter
+    this.element.value = "";
+    document.fire("xwiki:livetable:" + $$('.xwiki-livetable')[0].id + ":filtersChanged");     
+  },
+
+  /**
+   * Sets up the combination for the suggest to work properly, 
+   * with a hidden field that keeps the keys and a visible field that holds the values
+   * @param input The html input that will be used fot the suggest
+   **/  
+  setupSuggest: function(input) {
+    var inputName = input.readAttribute('name');
+    var inputId = input.readAttribute('id');
+    var hiddenInput = new Element('input', {'type' : 'hidden', 'name': inputName, 'value': input.readAttribute('value'), 'id' : inputId + "_filter"});
+    input.insert({after : hiddenInput});
+    input.writeAttribute('name', inputName + "_suggest");
+    input.writeAttribute('id', inputId );
+ 
+    return hiddenInput;
+  }
+});
+  return XWiki;
+}(XWiki || {}));</code>
+    </property>
+    <property>
+      <name/>
+    </property>
+    <property>
+      <parse>0</parse>
+    </property>
+    <property>
+      <use>onDemand</use>
+    </property>
+  </object>
+  <object>
+    <name>XWiki.SuggestLiveTableFilterMacro</name>
+    <number>0</number>
+    <className>XWiki.StyleSheetExtension</className>
+    <guid>adfb9098-3757-4291-aeb0-4ac7bd293a28</guid>
+    <class>
+      <name>XWiki.StyleSheetExtension</name>
+      <customClass/>
+      <customMapping/>
+      <defaultViewSheet/>
+      <defaultEditSheet/>
+      <defaultWeb/>
+      <nameField/>
+      <validationScript/>
+      <cache>
+        <cache>0</cache>
+        <disabled>0</disabled>
+        <displayType>select</displayType>
+        <multiSelect>0</multiSelect>
+        <name>cache</name>
+        <number>6</number>
+        <prettyName>Caching policy</prettyName>
+        <relationalStorage>0</relationalStorage>
+        <separator> </separator>
+        <separators>|, </separators>
+        <size>1</size>
+        <unmodifiable>0</unmodifiable>
+        <values>long|short|default|forbid</values>
+        <classType>com.xpn.xwiki.objects.classes.StaticListClass</classType>
+      </cache>
+      <code>
+        <disabled>0</disabled>
+        <name>code</name>
+        <number>3</number>
+        <prettyName>Code</prettyName>
+        <rows>20</rows>
+        <size>50</size>
+        <unmodifiable>0</unmodifiable>
+        <classType>com.xpn.xwiki.objects.classes.TextAreaClass</classType>
+      </code>
+      <contentType>
+        <cache>0</cache>
+        <disabled>0</disabled>
+        <displayType>select</displayType>
+        <multiSelect>0</multiSelect>
+        <name>contentType</name>
+        <number>1</number>
+        <prettyName>Content Type</prettyName>
+        <relationalStorage>0</relationalStorage>
+        <separator> </separator>
+        <separators>|, </separators>
+        <size>1</size>
+        <unmodifiable>0</unmodifiable>
+        <values>CSS|LESS</values>
+        <classType>com.xpn.xwiki.objects.classes.StaticListClass</classType>
+      </contentType>
+      <name>
+        <disabled>0</disabled>
+        <name>name</name>
+        <number>2</number>
+        <prettyName>Name</prettyName>
+        <size>30</size>
+        <unmodifiable>0</unmodifiable>
+        <classType>com.xpn.xwiki.objects.classes.StringClass</classType>
+      </name>
+      <parse>
+        <disabled>0</disabled>
+        <displayFormType>select</displayFormType>
+        <displayType>yesno</displayType>
+        <name>parse</name>
+        <number>5</number>
+        <prettyName>Parse content</prettyName>
+        <unmodifiable>0</unmodifiable>
+        <classType>com.xpn.xwiki.objects.classes.BooleanClass</classType>
+      </parse>
+      <use>
+        <cache>0</cache>
+        <disabled>0</disabled>
+        <displayType>select</displayType>
+        <multiSelect>0</multiSelect>
+        <name>use</name>
+        <number>4</number>
+        <prettyName>Use this extension</prettyName>
+        <relationalStorage>0</relationalStorage>
+        <separator> </separator>
+        <separators>|, </separators>
+        <size>1</size>
+        <unmodifiable>0</unmodifiable>
+        <values>currentPage|onDemand|always</values>
+        <classType>com.xpn.xwiki.objects.classes.StaticListClass</classType>
+      </use>
+    </class>
+    <property>
+      <cache>default</cache>
+    </property>
+    <property>
+      <code>ul.picker-list {
+    list-style: none;
+    cursor: text;
+    padding: 0px;
+    overflow: visible;
+    -webkit-user-select: none;
+    margin: 0px;
+}
+
+ul.picker-list li.Token {
+    border: 1px solid #ccd5e3;
+    background-color: #eff2f7;
+    padding: 0 5px;
+    line-height: 18px;
+    overflow: visible;
+    float: left;
+}
+
+
+ul.picker-list li.Token {
+    margin: 5px 0 0 0px;
+}
+ul.picker-list li.Token span.picker-item {
+    font-family: Arial,Helvetica,sans-serif;
+    font-size: 12px;
+    line-height: 18px;
+    float: left;
+    width: 85%;
+}
+
+ul.picker-list li.Token a.Close {
+    font-family: Arial, Helvetica, sans-serif !important;
+    font-size: 16px !important;
+    line-height: 18px;
+    float: right;
+    margin: 1px 0 0 5px;
+    padding: 0;
+    cursor: pointer;
+    color: #a6b4ce;
+    font-weight: bold;
+}
+
+ul.picker-list li.Token a.Close:hover {
+    background: transparent;
+    text-decoration: none;
+}
+input.suggested{
+    width: 140px;
+}
+ul.xlist li.xitem div.xitemcontainer {
+    float: left;
+    width: 90%;
+    white-space: normal;
+    border-bottom: solid 1px #D3E6FF;
+}
+div.suggestItems ul.suggestList li.xitem {
+    padding-left: 5px;
+}
+input.suggested{
+width: 200px;
+}</code>
+    </property>
+    <property>
+      <contentType>CSS</contentType>
+    </property>
+    <property>
+      <name/>
+    </property>
+    <property>
+      <parse>0</parse>
+    </property>
+    <property>
+      <use>onDemand</use>
+    </property>
+  </object>
+  <object>
+    <name>XWiki.SuggestLiveTableFilterMacro</name>
+    <number>0</number>
+    <className>XWiki.WikiMacroClass</className>
+    <guid>406192b6-580a-40d0-9db5-c4629ce924f4</guid>
+    <class>
+      <name>XWiki.WikiMacroClass</name>
+      <customClass/>
+      <customMapping/>
+      <defaultViewSheet/>
+      <defaultEditSheet/>
+      <defaultWeb/>
+      <nameField/>
+      <validationScript/>
+      <code>
+        <disabled>0</disabled>
+        <name>code</name>
+        <number>9</number>
+        <prettyName>Macro code</prettyName>
+        <rows>20</rows>
+        <size>40</size>
+        <unmodifiable>0</unmodifiable>
+        <classType>com.xpn.xwiki.objects.classes.TextAreaClass</classType>
+      </code>
+      <contentDescription>
+        <disabled>0</disabled>
+        <name>contentDescription</name>
+        <number>8</number>
+        <prettyName>Content description (Not applicable for "No content" type)</prettyName>
+        <rows>5</rows>
+        <size>40</size>
+        <unmodifiable>0</unmodifiable>
+        <classType>com.xpn.xwiki.objects.classes.TextAreaClass</classType>
+      </contentDescription>
+      <contentType>
+        <cache>0</cache>
+        <disabled>0</disabled>
+        <displayType>select</displayType>
+        <multiSelect>0</multiSelect>
+        <name>contentType</name>
+        <number>7</number>
+        <prettyName>Macro content type</prettyName>
+        <relationalStorage>0</relationalStorage>
+        <separator>|</separator>
+        <separators>|</separators>
+        <size>1</size>
+        <unmodifiable>0</unmodifiable>
+        <values>Optional|Mandatory|No content</values>
+        <classType>com.xpn.xwiki.objects.classes.StaticListClass</classType>
+      </contentType>
+      <defaultCategory>
+        <disabled>0</disabled>
+        <name>defaultCategory</name>
+        <number>4</number>
+        <prettyName>Default category</prettyName>
+        <size>30</size>
+        <unmodifiable>0</unmodifiable>
+        <classType>com.xpn.xwiki.objects.classes.StringClass</classType>
+      </defaultCategory>
+      <description>
+        <disabled>0</disabled>
+        <name>description</name>
+        <number>3</number>
+        <prettyName>Macro description</prettyName>
+        <rows>5</rows>
+        <size>40</size>
+        <unmodifiable>0</unmodifiable>
+        <classType>com.xpn.xwiki.objects.classes.TextAreaClass</classType>
+      </description>
+      <id>
+        <disabled>0</disabled>
+        <name>id</name>
+        <number>1</number>
+        <prettyName>Macro id</prettyName>
+        <size>30</size>
+        <unmodifiable>0</unmodifiable>
+        <classType>com.xpn.xwiki.objects.classes.StringClass</classType>
+      </id>
+      <name>
+        <disabled>0</disabled>
+        <name>name</name>
+        <number>2</number>
+        <prettyName>Macro name</prettyName>
+        <size>30</size>
+        <unmodifiable>0</unmodifiable>
+        <classType>com.xpn.xwiki.objects.classes.StringClass</classType>
+      </name>
+      <supportsInlineMode>
+        <disabled>0</disabled>
+        <displayFormType>select</displayFormType>
+        <displayType>yesno</displayType>
+        <name>supportsInlineMode</name>
+        <number>5</number>
+        <prettyName>Supports inline mode</prettyName>
+        <unmodifiable>0</unmodifiable>
+        <classType>com.xpn.xwiki.objects.classes.BooleanClass</classType>
+      </supportsInlineMode>
+      <visibility>
+        <cache>0</cache>
+        <disabled>0</disabled>
+        <displayType>select</displayType>
+        <multiSelect>0</multiSelect>
+        <name>visibility</name>
+        <number>6</number>
+        <prettyName>Macro visibility</prettyName>
+        <relationalStorage>0</relationalStorage>
+        <separator>|</separator>
+        <separators>|</separators>
+        <size>1</size>
+        <unmodifiable>0</unmodifiable>
+        <values>Current User|Current Wiki|Global</values>
+        <classType>com.xpn.xwiki.objects.classes.StaticListClass</classType>
+      </visibility>
+    </class>
+    <property>
+      <code>{{velocity}}
+##########################################################
+## Suggest LiveTable Filter Macro
+## 
+## Authors: Zoubir Medjdoub 
+##          
+##########################################################
+## Include JS 
+#set ($discard = $xwiki.jsx.use("XWiki.SuggestLiveTableFilterMacro"))
+#set ($discard = $xwiki.ssx.use('XWiki.SuggestLiveTableFilterMacro'))
+#set ($suggestServiceURL = $xcontext.macro.params.suggestServiceURL)
+#set ($colname = $xcontext.macro.params.colname)
+{{html wiki="false"}}
+&lt;script type="text/javascript"&gt;
+document.observe('xwiki:livetable:loading', function() {
+  // getting the input that will be transform to suggest
+  var suggestInput = $$('[name="${colname}"]')[0];
+  suggestInput.addClassName('suggested');
+  if(!suggestInput.hasClassName('suggested')) {
+    suggestInput = $('${colname}_suggest');
+  }
+  // create the SuggestLiveTableFilter obj, at first this will create the hidden input
+  // and this hidden input will be init as LiveTable filter
+  var suggestLT = new XWiki.widgets.SuggestLiveTableFilter(suggestInput,'$colname','$suggestServiceURL');
+  // Add the suggest Behavior after the complete loading of the LiveTable
+  // The purpose is to remove the filter LT listener and add the suggest listener
+  document.observe('xwiki:livetable:loadingComplete', function() {
+   suggestLT.addSuggestBehavior();
+  });
+});
+&lt;/script&gt;
+{{/html}}
+{{/velocity}}</code>
+    </property>
+    <property>
+      <contentDescription/>
+    </property>
+    <property>
+      <contentType>No content</contentType>
+    </property>
+    <property>
+      <defaultCategory>Development</defaultCategory>
+    </property>
+    <property>
+      <description>Transform the LiveTable filter input into suggest inorder to filter by the key ( for eg : XWiki.User1 ), we can use this macros on a dbList field property.
+This macro should be called before the livetable macro</description>
+    </property>
+    <property>
+      <id>SuggestLiveTableFilter</id>
+    </property>
+    <property>
+      <name>Suggest LiveTable Filter</name>
+    </property>
+    <property>
+      <supportsInlineMode>1</supportsInlineMode>
+    </property>
+    <property>
+      <visibility>Current Wiki</visibility>
+    </property>
+  </object>
+  <object>
+    <name>XWiki.SuggestLiveTableFilterMacro</name>
+    <number>0</number>
+    <className>XWiki.WikiMacroParameterClass</className>
+    <guid>dc950418-69d3-4031-9629-dc34d6a56a7e</guid>
+    <class>
+      <name>XWiki.WikiMacroParameterClass</name>
+      <customClass/>
+      <customMapping/>
+      <defaultViewSheet/>
+      <defaultEditSheet/>
+      <defaultWeb/>
+      <nameField/>
+      <validationScript/>
+      <defaultValue>
+        <disabled>0</disabled>
+        <name>defaultValue</name>
+        <number>4</number>
+        <prettyName>Parameter default value</prettyName>
+        <size>30</size>
+        <unmodifiable>0</unmodifiable>
+        <classType>com.xpn.xwiki.objects.classes.StringClass</classType>
+      </defaultValue>
+      <description>
+        <disabled>0</disabled>
+        <name>description</name>
+        <number>2</number>
+        <prettyName>Parameter description</prettyName>
+        <rows>5</rows>
+        <size>40</size>
+        <unmodifiable>0</unmodifiable>
+        <classType>com.xpn.xwiki.objects.classes.TextAreaClass</classType>
+      </description>
+      <mandatory>
+        <disabled>0</disabled>
+        <displayFormType>select</displayFormType>
+        <displayType>yesno</displayType>
+        <name>mandatory</name>
+        <number>3</number>
+        <prettyName>Parameter mandatory</prettyName>
+        <unmodifiable>0</unmodifiable>
+        <classType>com.xpn.xwiki.objects.classes.BooleanClass</classType>
+      </mandatory>
+      <name>
+        <disabled>0</disabled>
+        <name>name</name>
+        <number>1</number>
+        <prettyName>Parameter name</prettyName>
+        <size>30</size>
+        <unmodifiable>0</unmodifiable>
+        <classType>com.xpn.xwiki.objects.classes.StringClass</classType>
+      </name>
+    </class>
+    <property>
+      <defaultValue/>
+    </property>
+    <property>
+      <description>The url of the suggest service.
+(eg: xwiki/bin/view/Space/name?xpage=suggest&amp;classname=class&amp;fieldname=fieldname )
+the content of this service should be an xml like :
+&lt;?xml version="1.0" encoding="UTF-8"?&gt;
+&lt;results type="5"&gt;&lt;rs id="" info="$key"&gt;$value&lt;/rs&gt; ....&lt;/results&gt;</description>
+    </property>
+    <property>
+      <mandatory>1</mandatory>
+    </property>
+    <property>
+      <name>suggestServiceURL</name>
+    </property>
+  </object>
+  <object>
+    <name>XWiki.SuggestLiveTableFilterMacro</name>
+    <number>1</number>
+    <className>XWiki.WikiMacroParameterClass</className>
+    <guid>11da9c6a-0f05-454d-81c5-f696a923a2f5</guid>
+    <class>
+      <name>XWiki.WikiMacroParameterClass</name>
+      <customClass/>
+      <customMapping/>
+      <defaultViewSheet/>
+      <defaultEditSheet/>
+      <defaultWeb/>
+      <nameField/>
+      <validationScript/>
+      <defaultValue>
+        <disabled>0</disabled>
+        <name>defaultValue</name>
+        <number>4</number>
+        <prettyName>Parameter default value</prettyName>
+        <size>30</size>
+        <unmodifiable>0</unmodifiable>
+        <classType>com.xpn.xwiki.objects.classes.StringClass</classType>
+      </defaultValue>
+      <description>
+        <disabled>0</disabled>
+        <name>description</name>
+        <number>2</number>
+        <prettyName>Parameter description</prettyName>
+        <rows>5</rows>
+        <size>40</size>
+        <unmodifiable>0</unmodifiable>
+        <classType>com.xpn.xwiki.objects.classes.TextAreaClass</classType>
+      </description>
+      <mandatory>
+        <disabled>0</disabled>
+        <displayFormType>select</displayFormType>
+        <displayType>yesno</displayType>
+        <name>mandatory</name>
+        <number>3</number>
+        <prettyName>Parameter mandatory</prettyName>
+        <unmodifiable>0</unmodifiable>
+        <classType>com.xpn.xwiki.objects.classes.BooleanClass</classType>
+      </mandatory>
+      <name>
+        <disabled>0</disabled>
+        <name>name</name>
+        <number>1</number>
+        <prettyName>Parameter name</prettyName>
+        <size>30</size>
+        <unmodifiable>0</unmodifiable>
+        <classType>com.xpn.xwiki.objects.classes.StringClass</classType>
+      </name>
+    </class>
+    <property>
+      <defaultValue/>
+    </property>
+    <property>
+      <description>The input filed that will be used as suggest</description>
+    </property>
+    <property>
+      <mandatory>1</mandatory>
+    </property>
+    <property>
+      <name>colname</name>
+    </property>
+  </object>
+</xwikidoc>
